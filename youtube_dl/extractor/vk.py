@@ -14,6 +14,7 @@ from ..utils import (
     int_or_none,
     OnDemandPagedList,
     orderedSet,
+    random_user_agent,
     str_or_none,
     str_to_int,
     unescapeHTML,
@@ -62,12 +63,18 @@ class VKBaseIE(InfoExtractor):
     def _real_initialize(self):
         self._login()
 
-    def _download_payload(self, path, video_id, data, fatal=True):
+    def _download_payload(self, path, video_id, data, fatal=True, query={}, extra_headers={}):
         data['al'] = 1
         code, payload = self._download_json(
             'https://vk.com/%s.php' % path, video_id,
             data=urlencode_postdata(data), fatal=fatal,
-            headers={'X-Requested-With': 'XMLHttpRequest'})['payload']
+            headers={
+                'X-Requested-With': 'XMLHttpRequest',
+                'User-Agent': random_user_agent(),
+                **extra_headers
+            },
+            query=query,
+        )['payload']
         if code == '3':
             self.raise_login_required()
         elif code == '8':
@@ -310,19 +317,26 @@ class VKIE(VKBaseIE):
     def _real_extract(self, url):
         mobj = re.match(self._VALID_URL, url)
         video_id = mobj.group('videoid')
-
         mv_data = {}
         if video_id:
             data = {
-                'act': 'show_inline',
+                'act': 'show',
                 'video': video_id,
+            }
+            query = {
+                'act': 'show',
+            }
+            extra_headers = {
+                'authority': 'vk.com',
+                'origin': 'https://vk.com',
+                'referer': url
             }
             # Some videos (removed?) can only be downloaded with list id specified
             list_id = mobj.group('list_id')
             if list_id:
                 data['list'] = list_id
 
-            payload = self._download_payload('al_video', video_id, data)
+            payload = self._download_payload('al_video', video_id, data, query=query, extra_headers=extra_headers)
             info_page = payload[1]
             opts = payload[-1]
             mv_data = opts.get('mvData') or {}
